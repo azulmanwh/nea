@@ -1,73 +1,67 @@
-import pygame
-import os
-from enum import Enum
+from perlin_noise import PerlinNoise
+from ursina import *
+from ursina.prefabs.first_person_controller import FirstPersonController
 
-WIDTH, HEIGHT = 1280, 700
+res = 100
 
-WIN = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("NEAPrototype")
+class Block(Button):
+    def __init__(self, position = (0,0,0)):
+        super().__init__(
+            parent = scene,
+            position = position,
+            model = 'cube',
+            origin_y = 0.5,
+            texture = './Textures/stone.png',
+            color = color.gray,
+            highlight_color = color.light_gray,
+            collider = 'box'
+            )
 
-LIGHTBLUE = (0, 180, 255)
+def createChunk(coordinates):
+    #Rewrite this to produce the chunk to go from 0,0 to 10,10 rather than -5,-5 to 5,5
+    #This is so that I can pass a chunk coordinate and it will get generated there
+    for z in range(coordinates[0]-5,coordinates[1]+5):
+        for x in range(coordinates[0]-5,coordinates[1]+5):
+            y = noise([x/res,z/res])
+            print(y)
+            block = Block(position = (x,y*5,z))
 
-FPS = 144
-SPEED = 3
+def handle_movement():
+    #time.dt is the difference between a second and the frequency of the game being run so that the game speed is the same regardless of 
+    #different FPS values
+    if(held_keys['left shift']):
+        player.y -= 3 * time.dt
+    elif(held_keys['space']):
+        player.y += 3 * time.dt
 
-PLAYER_TEXTURE = pygame.image.load(os.path.join('Textures', 'player.png'))
-PLAYER = pygame.transform.scale(PLAYER_TEXTURE, (80, 150))
-GRASS_TEXTURE = pygame.image.load(os.path.join('Textures', 'grass.png'))
-STONE_TEXTURE = pygame.image.load(os.path.join('Textures', 'stone.png'))
-DIRT_TEXTURE = pygame.image.load(os.path.join('Textures', 'dirt.png'))
+def toggleGravity():
+    if(player.gravity == 0):
+        player.gravity = 1
+    else:
+        player.gravity = 0
 
-class BlockType(Enum):
-    GRASS = 1
-    DIRT = 2
-    STONE = 3
-
-class Player:
-    def __init__(self, position):
-        self.position = position
-
-class Block:
-    def __init__(self, position, blockType, texture):
-        self.position = position
-        self.blockType = blockType
-        self.texture = texture
+def input(key):
+    if(key == 'escape'):
+        quit()
+    elif(key == 'g'):
+        toggleGravity()
 
 
-def draw_window(playerPosition, grass):
-    WIN.fill(LIGHTBLUE)
-    WIN.blit(PLAYER, playerPosition)
-    WIN.blit(grass.texture, grass.position)
-    pygame.display.update()
 
-def movement(keys_pressed, playerPosition):
-    if(keys_pressed[pygame.K_w]):
-        print("No jumping yet!")
-    if(keys_pressed[pygame.K_a]):
-        playerPosition[0] -= SPEED
-    if(keys_pressed[pygame.K_s]):
-        print("Not this either.")
-    if(keys_pressed[pygame.K_d]):
-        playerPosition[0] += SPEED 
+app = Ursina()
 
-def main():
+noise = PerlinNoise(octaves = 10)
 
-    player1 = Player([640, 260])
-    grass1 = Block([300, 300], BlockType.GRASS, GRASS_TEXTURE)
-    
-    clock = pygame.time.Clock()
-    
-    run = True
-    while run:
-        clock.tick(FPS)
-        for event in pygame.event.get():
-            if (event.type == pygame.QUIT):
-                run = False
-                
-        keys_pressed = pygame.key.get_pressed()
-        movement(keys_pressed, player1.position)
-        draw_window(player1.position, grass1)        
-    pygame.quit()
-    
-if __name__ == "__main__":
-    main()
+#This creates the first chunk of the game.
+createChunk((0,0))
+
+player = FirstPersonController(gravity=0)
+
+def update():
+    currentChunk = whatChunkAmIIn()
+    #Here another chunk will be created based on what chunk the player is in
+    #but a check needs to be made for wether the chunk has already been loaded.
+    #Maybe this value can be held in a list of tuples for loaded chunks.
+    handle_movement()
+
+app.run()

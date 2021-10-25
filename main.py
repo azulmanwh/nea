@@ -20,14 +20,28 @@ def whatChunkAmIIn():
     z = round((player.z-5) / 10)
     return (x,z)
 
+def saveChunkData(yCoordinates, chunkCoordinates):
+    chunkFile = open('ChunkData.txt', 'a')
+    try:
+        line = str(chunkCoordinates[0]) + "," + str(chunkCoordinates[1]) + " | "
+        for coordinate in yCoordinates:
+            line += " " + str(coordinate)
+        chunkFile.write(line + "\n")
+    finally:
+        chunkFile.close()
+
+
 def createChunk(coordinates, loadedChunks):
     if(coordinates not in set(loadedChunks)):
+        ycoordinates = []
         pixelX = coordinates[0]*10
         pixelY = coordinates[1]*10
         for z in range(10):
             for x in range(10):
                 Block(position = (pixelX + x, round(noise([(pixelX + x)/res, (pixelY + z)/res])*3), pixelY + z))
+                ycoordinates.append(round(noise([(pixelX + x)/res, (pixelY + z)/res])*3))
         loadedChunks.append(coordinates)
+        saveChunkData(ycoordinates, coordinates)
 
 def handle_movement():
     #time.dt is the difference between a second and the frequency of the game being run so that the game speed is the same regardless of 

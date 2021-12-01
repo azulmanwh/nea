@@ -4,11 +4,6 @@ from ursina.prefabs.first_person_controller import FirstPersonController
 
 res = 100
 
-'''
-'''
-
-
-
 class ChunkChecker():
 
     def __init__(self, path):
@@ -61,16 +56,6 @@ class ChunkSaver():
         finally:
             file.close()
 
-# class ChunkLoader():
-
-#     def __init__(self, path):
-#         self.__path = path
-
-#     def load(self, chunkCoords):
-#         data = ChunkLocator.getData(chunkCoords)
-        
-
-
 class ChunkGenerator():
 
     def __init__(self, checker, noise, saver):
@@ -80,13 +65,21 @@ class ChunkGenerator():
 
     def generate(self, coordinates):
         ycoordinates = []
+        chunkData = ChunkData(coordinates)
+        #pixel will be the coordinate of the noise for the block, which needs to be adjusted as the coordinates are chunk coordinates
         pixelX = coordinates.getX()*10
         pixelY = coordinates.getY()*10
         for z in range(10):
             for x in range(10):
-                Block(position = (pixelX + x, round(self.__noise([(pixelX + x)/res, (pixelY + z)/res])*3), pixelY + z))
+                #instantiates a block at the location
+                #the noise refers to a float which will be the height of the block
+                #saving to chunkData allows for the blocks to be changed after being instantiated
+                #saving to ycoordinates so that the chunkdata can be saved
+                block = Block(position = (pixelX + x, round(self.__noise([(pixelX + x)/res, (pixelY + z)/res])*3), pixelY + z))
+                chunkData.addBlock(block)
                 ycoordinates.append(round(self.__noise([(pixelX + x)/res, (pixelY + z)/res])*3))
         self.saver.saveChunkData(coordinates, ycoordinates)
+        return chunkData
 
 class Block(Entity):
 
@@ -95,15 +88,38 @@ class Block(Entity):
             position = position,
             model = 'cube',
             origin_y = 0.5,
-            texture = './Textures/stone.png',
-            color = color.gray
+            texture = './Textures/grass.png',
+            color = color.white
             )
+
+class ChunkData():
+
+    def __init__(self, coords, blocks = []):
+        #list of Block entities
+        self.__blocks = blocks
+        #chunk coords
+        self.__coords = coords
+
+    def getCoords(self):
+        return self.__coords
+
+    def getBlocks(self):
+        return self.__blocks
+
+    def addBlock(self, block):
+        self.__blocks.append(block)
+
 
 class ChunkCoords():
 
     def __init__(self, x, y):
         self.__x = x
         self.__y = y
+
+    def __eq__(self, other):
+        if(isinstance(other, ChunkCoords)):
+            return self.__x == other.getX() and self.__y == other.getY()
+        return False
 
     def getX(self):
         return self.__x
@@ -128,18 +144,24 @@ class MovementHandler():
     def __init__(self, locator):
         self.__locator = locator
         self.currentChunk = ChunkCoords(0, 0)
+        self.previousChunkCoords = ChunkCoords(0, 0)
         self.userCoords = UserCoords(0, 0)
         self.previousUserCoords = UserCoords(0, 0)
 
     def chunkChanged(self):
-        if((self.__locator.locate(self.userCoords)) == (self.__locator.locate(self.previousUserCoords))):
-            print(self.__locator.locate(self.userCoords))
-            print(self.__locator.locate(self.previousUserCoords))
+        if(self.currentChunk != self.previousChunkCoords):
+            print(str(self.currentChunk.getX()) + " " + str(self.currentChunk.getY()))
+            print(str(self.previousChunkCoords.getX()) + " " + str(self.previousChunkCoords.getY()))
             return True
+        return False
 
-    def changedCoords(self, newCoords):
+    def changeCoords(self, newCoords):
         self.previousUserCoords = self.userCoords
         self.userCoords = newCoords
+
+    def changeChunkCoords(self, newCoords):
+        self.previousChunkCoords = self.currentChunk
+        self.currentChunk = newCoords
 
 class Game():
 
@@ -151,16 +173,23 @@ class Game():
         self.generator = ChunkGenerator(ChunkChecker("ChunkData.txt"), noise, ChunkSaver("ChunkData.txt", self.locator))
 
     def start(self):
+        #creates starting chunk for the player to see
         self.generator.generate(ChunkCoords(0, 0))
     def update(self):
         self.updateCoords()
         if(self.movementHandler.chunkChanged()):
-            self.generator.generate(locator(movementHandler.userCoords))
+            self.updateChunks()
 
         self.handle_input()
 
+    def updateChunks(self):
+        #creates chunks in a 3x3 grid around the player
+        currentChunk = self.movementHandler.currentChunk
+        self.generator.generate(currentChunk)
+
     def updateCoords(self):
-        self.movementHandler.changedCoords(UserCoords(self.player.x, self.player.z))
+        self.movementHandler.changeCoords(UserCoords(self.player.x, self.player.z))
+        self.movementHandler.changeChunkCoords(self.locator.locate(UserCoords(self.player.x, self.player.z)))
 
     def handle_input(self):
         #time.dt is the difference between a second and the frequency of the game being run so that the game speed is the same regardless of 
@@ -173,6 +202,8 @@ class Game():
             quit()
         elif(held_keys['g']):
             self.player.gravity = (1 if self.player.gravity == 0 else 0)
+        elif(held_keys['c']):
+            self.generator.delete(self.movementHandler.currentChunk)
 
 
 

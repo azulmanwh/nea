@@ -1,9 +1,15 @@
 from perlin_noise import PerlinNoise
 from ursina import *
 from ursina.prefabs.first_person_controller import FirstPersonController
+from abc import ABCMeta, abstractmethod
 
 res = 100
 
+"""
+TO DO LIST:
+-implement observer for chunk changing
+-finish making 3x3 chunks generate arround player
+"""
 class ChunkChecker():
 
     def __init__(self, path):
@@ -171,10 +177,11 @@ class Game():
         self.locator = ChunkLocator(player, "ChunkData.txt")
         self.movementHandler = MovementHandler(ChunkLocator(player, "ChunkData.txt")) # Initiates movement handler.
         self.generator = ChunkGenerator(ChunkChecker("ChunkData.txt"), noise, ChunkSaver("ChunkData.txt", self.locator))
+        self.chunkData = []
 
     def start(self):
         #creates starting chunk for the player to see
-        self.generator.generate(ChunkCoords(0, 0))
+        self.chunkData.append(self.generator.generate(ChunkCoords(0, 0)))
     def update(self):
         self.updateCoords()
         if(self.movementHandler.chunkChanged()):
@@ -185,7 +192,12 @@ class Game():
     def updateChunks(self):
         #creates chunks in a 3x3 grid around the player
         currentChunk = self.movementHandler.currentChunk
-        self.generator.generate(currentChunk)
+        self.chunkData.append(self.generator.generate(currentChunk))
+
+    def deleteChunk(self):
+        chunk = self.chunkData.pop()
+        for block in chunk.getBlocks():
+            block.enabled = False        
 
     def updateCoords(self):
         self.movementHandler.changeCoords(UserCoords(self.player.x, self.player.z))
@@ -202,8 +214,6 @@ class Game():
             quit()
         elif(held_keys['g']):
             self.player.gravity = (1 if self.player.gravity == 0 else 0)
-        elif(held_keys['c']):
-            self.generator.delete(self.movementHandler.currentChunk)
 
 
 
@@ -212,7 +222,13 @@ app = Ursina()
 game = Game(FirstPersonController(gravity=0), PerlinNoise(octaves = 16, seed = 1))
 game.start()
 
+
+#ursina functions can't make oop
 def update():
     game.update()
+
+def input(key):
+    if(key == 'c'):
+        game.deleteChunk()
 
 app.run()

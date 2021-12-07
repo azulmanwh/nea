@@ -3,12 +3,12 @@ from ursina import *
 from ursina.prefabs.first_person_controller import FirstPersonController
 from abc import ABCMeta, abstractmethod
 
-res = 100
-
 """
 TO DO LIST:
 -implement observer for chunk changing
--finish making 3x3 chunks generate arround player
+-when creating a chunk, first try to load the chunk, if you can't find the chunk in the world file, then create the chunk.
+-get a mountain to render (mess around with the perlin noise generation)
+-create chunks on a separate thread for performance
 """
 class ChunkChecker():
 
@@ -75,13 +75,16 @@ class ChunkGenerator():
         #pixel will be the coordinate of the noise for the block, which needs to be adjusted as the coordinates are chunk coordinates
         pixelX = coordinates.getX()*10
         pixelY = coordinates.getY()*10
+        heightScale = 20 #how high the blocks will spawn multiplier
+        res = 200 #"width" of the noisemap
         for z in range(10):
             for x in range(10):
                 #instantiates a block at the location
                 #the noise refers to a float which will be the height of the block
                 #saving to chunkData allows for the blocks to be changed after being instantiated
                 #saving to ycoordinates so that the chunkdata can be saved
-                block = Block(position = (pixelX + x, round(self.__noise([(pixelX + x)/res, (pixelY + z)/res])*3), pixelY + z))
+
+                block = Block(position = (pixelX + x, round(self.__noise([(pixelX + x)/res, (pixelY + z)/res])*heightScale), pixelY + z))
                 chunkData.addBlock(block)
                 ycoordinates.append(round(self.__noise([(pixelX + x)/res, (pixelY + z)/res])*3))
         self.saver.saveChunkData(coordinates, ycoordinates)
@@ -181,7 +184,7 @@ class Game():
 
     def start(self):
         #creates starting chunk for the player to see
-        self.chunkData.append(self.generator.generate(ChunkCoords(0, 0)))
+        self.updateChunks()
     def update(self):
         self.updateCoords()
         if(self.movementHandler.chunkChanged()):
@@ -192,9 +195,32 @@ class Game():
     def updateChunks(self):
         #creates chunks in a 3x3 grid around the player
         currentChunk = self.movementHandler.currentChunk
-        self.chunkData.append(self.generator.generate(currentChunk))
+        x = currentChunk.getX()
+        y = currentChunk.getY()
 
-    def deleteChunk(self):
+        if(self.chunkData):
+            self.deleteChunks()
+
+        tl = ChunkCoords(x-1,y+1)
+        tc = ChunkCoords(x,y+1)
+        tr = ChunkCoords(x+1,y+1)
+        cl = ChunkCoords(x-1, y)
+        cr = ChunkCoords(x+1, y)
+        bl = ChunkCoords(x-1, y-1)
+        bc = ChunkCoords(x, y-1)
+        br = ChunkCoords(x+1, y-1)
+       
+        self.chunkData.append(self.generator.generate(tl))
+        self.chunkData.append(self.generator.generate(tc))
+        self.chunkData.append(self.generator.generate(tr))
+        self.chunkData.append(self.generator.generate(cl))
+        self.chunkData.append(self.generator.generate(currentChunk))
+        self.chunkData.append(self.generator.generate(cr))
+        self.chunkData.append(self.generator.generate(bl))
+        self.chunkData.append(self.generator.generate(bc))
+        self.chunkData.append(self.generator.generate(br))
+
+    def deleteChunks(self):
         chunk = self.chunkData.pop()
         for block in chunk.getBlocks():
             block.enabled = False        
@@ -204,7 +230,7 @@ class Game():
         self.movementHandler.changeChunkCoords(self.locator.locate(UserCoords(self.player.x, self.player.z)))
 
     def handle_input(self):
-        #time.dt is the difference between a second and the frequency of the game being run so that the game speed is the same regardless of 
+        #time.dt is the difference between a second and the frequency of the game being run so that the game speed is the same regardless of
         #different FPS values
         if(held_keys['left shift']):
             self.player.y -= 3 * time.dt

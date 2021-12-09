@@ -6,7 +6,6 @@ from abc import ABCMeta, abstractmethod
 """
 TO DO LIST:
 -implement observer for chunk changing
--when creating a chunk, first try to load the chunk, if you can't find the chunk in the world file, then create the chunk.
 -create chunks on a separate thread for performance
 -create chunks with multiply layers of blocks, not just a top layer
 """
@@ -42,8 +41,12 @@ class ChunkLocator():
         file = open("ChunkData.txt", 'r')
         data = file.readlines()
         for line in data:
-            chunkData = line.split(";")[1]
-            return chunkData
+            split_line = line.split(";")
+            chunkData = split_line[1]
+            coords = ChunkCoords(int(split_line[0].split(",")[0]), int(split_line[0].split(",")[1]))
+            if(coords == chunkCoords):
+                return chunkData
+        raise NameError("Chunk not found in file!")
 
 class ChunkSaver():
 
@@ -56,7 +59,6 @@ class ChunkSaver():
         Chunk data is stored as the chunk coordinates of the chunk and then the y values of each block
         stored as comma separated values. The chunk coordinates in the beginning are comma separated as well
         the chunk coordinates and block coordinates are separated by a semicolon.
-
         Example-->
         -1,1;2,2,2,2,2,2,1,1,1,0,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,1,0,0,0,1,1,1,1,1,1,1,1,0,0,0,1,1,1,1,1,1,1,0,0,0,1,1,1,1,1,1,0,0,0,0,1,1,2,1,1,1,0,0,0,0,1,2,2,2,1,1,0,0,0,1,2,2,3,2,2,1,0,-1
         
@@ -104,8 +106,19 @@ class ChunkGenerator():
             return chunkData
 
     def load(self, coordinates):
-        y_coordinates = self.__locator.getData(coordinates)
-        print(y_coordinates)
+        pixelX = coordinates.getX()*10
+        pixelZ = coordinates.getY()*10
+        y_coordinates = str(self.__locator.getData(coordinates)).split(",")
+        chunkData = ChunkData(coordinates)
+        i = 0
+        for z in range(10):
+            for x in range(10):
+                y_value = int(y_coordinates[i])
+                block = Block(position = (pixelX + x, y_value, pixelZ + z))
+                chunkData.addBlock(block)
+                i += 1
+        return chunkData
+
 
 class Block(Entity):
 
@@ -124,6 +137,7 @@ class ChunkData():
         #list of Block entities
         self.__blocks = blocks
         #chunk coords
+
         self.__coords = coords
 
     def getCoords(self):
@@ -197,7 +211,7 @@ class Game():
         self.locator = ChunkLocator(player, "ChunkData.txt")
         self.movementHandler = MovementHandler(ChunkLocator(player, "ChunkData.txt")) # Initiates movement handler.
         self.generator = ChunkGenerator(ChunkChecker("ChunkData.txt"), noise, ChunkSaver("ChunkData.txt", self.locator), self.locator)
-        self.chunkData = []
+        self.chunkDataList = []
 
     def start(self):
         #creates starting chunk for the player to see
@@ -211,12 +225,15 @@ class Game():
 
     def updateChunks(self):
         #creates chunks in a 3x3 grid around the player
+
         currentChunk = self.movementHandler.currentChunk
         x = currentChunk.getX()
         y = currentChunk.getY()
 
-        if(self.chunkData):
-            self.deleteChunks()
+        if(self.chunkDataList):
+            for chunkDataObject in self.chunkDataList:
+                self.deleteChunk(chunkDataObject)
+
 
         tl = ChunkCoords(x-1,y+1)
         tc = ChunkCoords(x,y+1)
@@ -227,19 +244,25 @@ class Game():
         bc = ChunkCoords(x, y-1)
         br = ChunkCoords(x+1, y-1)
        
-        self.chunkData.append(self.generator.generate(tl))
-        self.chunkData.append(self.generator.generate(tc))
-        self.chunkData.append(self.generator.generate(tr))
-        self.chunkData.append(self.generator.generate(cl))
-        self.chunkData.append(self.generator.generate(currentChunk))
-        self.chunkData.append(self.generator.generate(cr))
-        self.chunkData.append(self.generator.generate(bl))
-        self.chunkData.append(self.generator.generate(bc))
-        self.chunkData.append(self.generator.generate(br))
+        self.chunkDataList.append(self.generator.generate(tl))
+        self.chunkDataList.append(self.generator.generate(tc))
+        self.chunkDataList.append(self.generator.generate(tr))
+        self.chunkDataList.append(self.generator.generate(cl))
+        self.chunkDataList.append(self.generator.generate(currentChunk))
+        self.chunkDataList.append(self.generator.generate(cr))
+        self.chunkDataList.append(self.generator.generate(bl))
+        self.chunkDataList.append(self.generator.generate(bc))
+        self.chunkDataList.append(self.generator.generate(br))
 
-    def deleteChunks(self):
-        chunk = self.chunkData.pop()
-        for block in chunk.getBlocks():
+    def deleteChunk(self, coordinates):
+
+        currentChunkData = ChunkData(ChunkCoords(0, 0))
+        for chunkDataObject in self.chunkDataList:
+            if(isinstance(chunkDataObject, ChunkData)):
+                if(chunkDataObject.getCoords() == coordinates):
+                    currentChunkData = chunkDataObject
+                    break
+        for block in currentChunkData.getBlocks():
             block.enabled = False        
 
     def updateCoords(self):

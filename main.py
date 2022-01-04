@@ -1,14 +1,7 @@
 from perlin_noise import PerlinNoise
 from ursina import *
 from ursina.prefabs.first_person_controller import FirstPersonController
-from abc import ABCMeta, abstractmethod
 
-"""
-TO DO LIST:
--implement observer for chunk changing
--create chunks on a separate thread for performance
--create chunks with multiply layers of blocks, not just a top layer
-"""
 class ChunkChecker():
 
     def __init__(self, path):
@@ -83,10 +76,10 @@ class ChunkGenerator():
 
     def generate(self, coordinates):
         if(self.__checker.hasBeenGenerated(coordinates)):
-            self.load(coordinates)
+            return(self.load(coordinates))
         else:
             ycoordinates = []
-            chunkData = ChunkData(coordinates)
+            chunkData = ChunkData(coordinates, [])
             #pixel will be the coordinate of the noise for the block, which needs to be adjusted as the coordinates are chunk coordinates
             pixelX = coordinates.getX()*10
             pixelY = coordinates.getY()*10
@@ -109,7 +102,7 @@ class ChunkGenerator():
         pixelX = coordinates.getX()*10
         pixelZ = coordinates.getY()*10
         y_coordinates = str(self.__locator.getData(coordinates)).split(",")
-        chunkData = ChunkData(coordinates)
+        chunkData = ChunkData(coordinates, [])
         i = 0
         for z in range(10):
             for x in range(10):
@@ -127,7 +120,7 @@ class Block(Entity):
             position = position,
             model = 'cube',
             origin_y = 0.5,
-            texture = './Textures/grass.png',
+            texture = './Textures/stone.png',
             color = color.white
             )
 
@@ -189,11 +182,7 @@ class MovementHandler():
         self.previousUserCoords = UserCoords(0, 0)
 
     def chunkChanged(self):
-        if(self.currentChunk != self.previousChunkCoords):
-            print(str(self.currentChunk.getX()) + " " + str(self.currentChunk.getY()))
-            print(str(self.previousChunkCoords.getX()) + " " + str(self.previousChunkCoords.getY()))
-            return True
-        return False
+        return True if self.currentChunk != self.previousChunkCoords else False
 
     def changeCoords(self, newCoords):
         self.previousUserCoords = self.userCoords
@@ -230,11 +219,11 @@ class Game():
         x = currentChunk.getX()
         y = currentChunk.getY()
 
-        if(self.chunkDataList):
-            for chunkDataObject in self.chunkDataList:
-                self.deleteChunk(chunkDataObject)
+        if(len(self.chunkDataList) != 0):
+            for i in range(len(self.chunkDataList)-1,-1,-1):
+                self.deleteChunk(i)
 
-
+        #tl = top left, tc = top center, tr = top right etc.
         tl = ChunkCoords(x-1,y+1)
         tc = ChunkCoords(x,y+1)
         tr = ChunkCoords(x+1,y+1)
@@ -244,6 +233,8 @@ class Game():
         bc = ChunkCoords(x, y-1)
         br = ChunkCoords(x+1, y-1)
        
+
+        #startTime = time.time()
         self.chunkDataList.append(self.generator.generate(tl))
         self.chunkDataList.append(self.generator.generate(tc))
         self.chunkDataList.append(self.generator.generate(tr))
@@ -253,17 +244,17 @@ class Game():
         self.chunkDataList.append(self.generator.generate(bl))
         self.chunkDataList.append(self.generator.generate(bc))
         self.chunkDataList.append(self.generator.generate(br))
+        #endTime = time.time()
 
-    def deleteChunk(self, coordinates):
+        #print(endTime - startTime)
 
-        currentChunkData = ChunkData(ChunkCoords(0, 0))
-        for chunkDataObject in self.chunkDataList:
-            if(isinstance(chunkDataObject, ChunkData)):
-                if(chunkDataObject.getCoords() == coordinates):
-                    currentChunkData = chunkDataObject
-                    break
-        for block in currentChunkData.getBlocks():
-            block.enabled = False        
+    def deleteChunk(self, index):
+        #index refers to the index of the chunk in the chunkDataList array
+        chunkDataObject = self.chunkDataList[index]
+        for block in chunkDataObject.getBlocks():
+            block.disable()
+            del block
+        del self.chunkDataList[index]
 
     def updateCoords(self):
         self.movementHandler.changeCoords(UserCoords(self.player.x, self.player.z))
@@ -295,6 +286,6 @@ def update():
 
 def input(key):
     if(key == 'c'):
-        game.deleteChunk()
+        game.deleteChunk(4)
 
 app.run()

@@ -15,7 +15,9 @@ class ChunkChecker():
             x = line.split(";")[0].split(",")[0] #returns the x coordinate of a bit of chunk data from file
             y = line.split(";")[0].split(",")[1] #returns the y coordinate
             if((chunkCoords.getX() == int(x)) and (chunkCoords.getY() == int(y))):
+                file.close()
                 return True
+        file.close()
         return False
 
 
@@ -38,7 +40,9 @@ class ChunkLocator():
             chunkData = split_line[1]
             coords = ChunkCoords(int(split_line[0].split(",")[0]), int(split_line[0].split(",")[1]))
             if(coords == chunkCoords):
+                file.close()
                 return chunkData
+        file.close()
         raise NameError("Chunk not found in file!")
 
 class ChunkSaver():
@@ -75,8 +79,9 @@ class ChunkGenerator():
         self.saver = saver
 
     def generate(self, coordinates):
+        terrain = Entity(model=None, collider=None)
         if(self.__checker.hasBeenGenerated(coordinates)):
-            return(self.load(coordinates))
+            return(self.load(coordinates, terrain))
         else:
             ycoordinates = []
             chunkData = ChunkData(coordinates, [])
@@ -93,12 +98,15 @@ class ChunkGenerator():
                     #saving to ycoordinates so that the chunkdata can be saved
                     y_value = round(self.__noise([(pixelX + x)/res, (pixelY + z)/res])*heightScale)
                     block = Block(position = (pixelX + x, y_value, pixelY + z))
+                    block.parent = terrain
                     chunkData.addBlock(block)
                     ycoordinates.append(y_value)
+            terrain.combine()
+            terrain.texture = './Textures/stone.png'
             self.saver.saveChunkData(coordinates, ycoordinates)
             return chunkData
 
-    def load(self, coordinates):
+    def load(self, coordinates, terrain):
         pixelX = coordinates.getX()*10
         pixelZ = coordinates.getY()*10
         y_coordinates = str(self.__locator.getData(coordinates)).split(",")
@@ -108,8 +116,11 @@ class ChunkGenerator():
             for x in range(10):
                 y_value = int(y_coordinates[i])
                 block = Block(position = (pixelX + x, y_value, pixelZ + z))
+                block.parent = terrain
                 chunkData.addBlock(block)
                 i += 1
+        terrain.combine()
+        terrain.texture = './Textures/stone.png'
         return chunkData
 
 
@@ -271,6 +282,8 @@ class Game():
             quit()
         elif(held_keys['g']):
             self.player.gravity = (1 if self.player.gravity == 0 else 0)
+        elif(held_keys['l']):
+            print("test")
 
 
 

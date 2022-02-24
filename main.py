@@ -1,6 +1,8 @@
 from perlin_noise import PerlinNoise
 from ursina import *
 from ursina.prefabs.first_person_controller import FirstPersonController
+import math
+from random import randint
 
 class ChunkChecker():
 
@@ -165,6 +167,20 @@ class ChunkCoords():
             return self.__x == other.getX() and self.__y == other.getY()
         return False
 
+    def getDistance(chunk1, chunk2):
+        return (math.sqrt(((chunk2.getX() - chunk1.getX()) ** 2) + ((chunk2.getY() - chunk1.getY()) ** 2)))
+
+    def getPossibleCoords(currentChunkCoords, r):
+        #r = radius
+        #this function will generate a "circle" of possible chunk coordinates around a given chunk coordinate
+        #this function is used to know which chunks could be generated at at a given time
+        coords = []
+        for y in range(-r, r+1):
+            for x in range(-r, r+1):
+                coords.append(ChunkCoords(currentChunkCoords.getX()+x, currentChunkCoords.getY()+y))
+        return coords
+        
+
     def getX(self):
         return self.__x
 
@@ -212,52 +228,44 @@ class Game():
         self.movementHandler = MovementHandler(ChunkLocator(player, "ChunkData.txt")) # Initiates movement handler.
         self.generator = ChunkGenerator(ChunkChecker("ChunkData.txt"), noise, ChunkSaver("ChunkData.txt", self.locator), self.locator)
         self.chunkDataList = []
+        self.__renderDistance = 5
 
     def start(self):
         #creates starting chunk for the player to see
+        self.chunkDataList.append(self.generator.generate(self.movementHandler.currentChunk))
         self.updateChunks()
     def update(self):
         self.updateCoords()
         if(self.movementHandler.chunkChanged()):
             self.updateChunks()
+        
 
         self.handle_input()
 
     def updateChunks(self):
         #creates chunks in a 3x3 grid around the player
-
         currentChunk = self.movementHandler.currentChunk
         x = currentChunk.getX()
         y = currentChunk.getY()
 
-        if(len(self.chunkDataList) != 0):
-            for i in range(len(self.chunkDataList)-1,-1,-1):
-                self.deleteChunk(i)
-
-        #tl = top left, tc = top center, tr = top right etc.
-        tl = ChunkCoords(x-1,y+1)
-        tc = ChunkCoords(x,y+1)
-        tr = ChunkCoords(x+1,y+1)
-        cl = ChunkCoords(x-1, y)
-        cr = ChunkCoords(x+1, y)
-        bl = ChunkCoords(x-1, y-1)
-        bc = ChunkCoords(x, y-1)
-        br = ChunkCoords(x+1, y-1)
+        # 0 1 2
+        # 3 4 5
+        # 6 7 8
+        newChunks = []
+        newChunks.append(ChunkCoords(x-1,y+1))
+        newChunks.append(ChunkCoords(x,y+1))
+        newChunks.append(ChunkCoords(x+1,y+1))
+        newChunks.append(ChunkCoords(x-1, y))
+        newChunks.append(ChunkCoords(x+1, y))
+        newChunks.append(ChunkCoords(x-1, y-1))
+        newChunks.append(ChunkCoords(x, y-1))
+        newChunks.append(ChunkCoords(x+1, y-1))
        
-
-        #startTime = time.time()
-        self.chunkDataList.append(self.generator.generate(tl))
-        self.chunkDataList.append(self.generator.generate(tc))
-        self.chunkDataList.append(self.generator.generate(tr))
-        self.chunkDataList.append(self.generator.generate(cl))
-        self.chunkDataList.append(self.generator.generate(currentChunk))
-        self.chunkDataList.append(self.generator.generate(cr))
-        self.chunkDataList.append(self.generator.generate(bl))
-        self.chunkDataList.append(self.generator.generate(bc))
-        self.chunkDataList.append(self.generator.generate(br))
-        #endTime = time.time()
-
-        #print(endTime - startTime)
+        for i in range(len(self.chunkDataList)):
+            if(self.chunkDataList[i].getCoords() in newChunks):
+                newChunks.remove(self.chunkDataList[i].getCoords())
+        for i in range(len(newChunks)):
+            self.chunkDataList.append(self.generator.generate(newChunks[i]))
 
     def deleteChunk(self, index):
         #index refers to the index of the chunk in the chunkDataList array
@@ -283,7 +291,7 @@ class Game():
         elif(held_keys['g']):
             self.player.gravity = (1 if self.player.gravity == 0 else 0)
         elif(held_keys['l']):
-            print("test")
+            self.updateChunks()
 
 
 

@@ -53,21 +53,18 @@ class ChunkSaver():
         self.__path = path
         self.__locator = locator
 
-    def saveChunkData(self, chunkCoords, data):
-        """
-        Chunk data is stored as the chunk coordinates of the chunk and then the y values of each block
-        stored as comma separated values. The chunk coordinates in the beginning are comma separated as well
-        the chunk coordinates and block coordinates are separated by a semicolon.
-        Example-->
-        -1,1;2,2,2,2,2,2,1,1,1,0,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,1,0,0,0,1,1,1,1,1,1,1,1,0,0,0,1,1,1,1,1,1,1,0,0,0,1,1,1,1,1,1,0,0,0,0,1,1,2,1,1,1,0,0,0,0,1,2,2,2,1,1,0,0,0,1,2,2,3,2,2,1,0,-1
-        
-        """
-        yCoordinates = data
+    def saveChunkData(self, chunkData):
+        #format of data being stored is as follows
+        #{chunkCoordinate.X},{chunkCoordinate.Y};block1.x,block1.y,block1.z,block1.type:block2.x,block2.y,block2.z,block2.type: and so on
+        #before the semi-colon are the chunk coordinates
+        #after the semi-colon and inbetween each colon are 3 coordinates and the type
+        #one for the x,y and z coordinates respectively and the last is the block type.
+        blocks = chunkData.getBlocks()
         file = open(self.__path, 'a')
         try:
-            line = str(chunkCoords.getX()) + "," + str(chunkCoords.getY()) + ";"
-            for coordinate in yCoordinates:
-                line += str(coordinate) + ","
+            line = str(chunkData.getCoords().getX()) + "," + str(chunkData.getCoords().getY()) + ";"
+            for block in blocks:
+                line += str(block.X) + "," + str(block.Y) + "," + str(block.Z) + "," + str(block.getType()) + ":"
             file.write(line + "\n")
         finally:
             file.close()
@@ -75,7 +72,7 @@ class ChunkSaver():
 class ChunkGenerator():
 
     def __init__(self, checker, noises, saver, locator):
-        self.__checker = checker
+        self.checker = checker
         self.__noises = noises
         self.__locator = locator
         self.saver = saver
@@ -83,10 +80,9 @@ class ChunkGenerator():
     def generate(self, coordinates):
         #All the terrain lines of code increase the fps of the program  by about 100.
         #the terrain lines of code stop the individual access of blocks
-        if(self.__checker.hasBeenGenerated(coordinates)):
+        if(self.checker.hasBeenGenerated(coordinates)):
             return(self.load(coordinates))
         else:
-            ycoordinates = []
             #topterrain = Entity(model=None, collider=None)
             #underterrain = Entity(model=None, collider=None)
             chunkData = ChunkData(coordinates, [])
@@ -106,45 +102,27 @@ class ChunkGenerator():
                     y_value += round(0.5 * self.__noises[1]([(pixelX + x)/res, (pixelY + z)/res])*heightScale)
                     y_value += round(0.25 * self.__noises[2]([(pixelX + x)/res, (pixelY + z)/res])*heightScale)
                     y_value += round(0.125 * self.__noises[3]([(pixelX + x)/res, (pixelY + z)/res])*heightScale)
-                    topblock = Block(position = (pixelX + x, y_value, pixelY + z), type = 'grass')
+                    topblock = Block(coordinates, position = (pixelX + x, y_value, pixelY + z), blockType = 'dirt')
                     #topblock.parent = topterrain
                     chunkData.addBlock(topblock)
                     for i in range(1,depth):
-                        block = Block(position = (pixelX + x, y_value-i, pixelY + z), type = 'dirt')
+                        block = Block(coordinates, position = (pixelX + x, y_value-i, pixelY + z), blockType = 'stone')
                         #block.parent = underterrain
                         chunkData.addBlock(block)
-                    ycoordinates.append(y_value)
             #topterrain.combine()
             #topterrain.texture = './Textures/grass.png'
             #underterrain.combine()
             #underterrain.texture = './Textures/stone.png'
-            self.saver.saveChunkData(coordinates, ycoordinates)
+            self.saver.saveChunkData(chunkData)
             return chunkData
 
-    def load(self, coordinates):
-        topterrain = Entity(model=None, collider=None)
-        underterrain = Entity(model=None, collider=None)
-        pixelX = coordinates.getX()*10
-        pixelY = coordinates.getY()*10
-        depth = 4
-        y_coordinates = str(self.__locator.getData(coordinates)).split(",")
-        chunkData = ChunkData(coordinates, [])
-        i = 0
-        for z in range(10):
-            for x in range(10):
-                y_value = int(y_coordinates[i])
-                topblock = Block(position = (pixelX + x, y_value, pixelY + z), type = 'grass')
-                #topblock.parent = topterrain
-                chunkData.addBlock(topblock)
-                for j in range(1,depth):
-                        block = Block(position = (pixelX + x, y_value-j, pixelY + z), type = 'dirt')
-                        #block.parent = underterrain
-                        chunkData.addBlock(block)
-                i += 1
-        #topterrain.combine()
-        #topterrain.texture = './Textures/grass.png'
-        #underterrain.combine()
-        #underterrain.texture = './Textures/stone.png'
+    def load(self, chunkCoords):
+        chunkData = ChunkData(chunkCoords, [])
+        for blockData in self.__locator.getData(chunkCoords).split(":"):
+            data = blockData.split(",")
+            if data[0] != '\n':
+                block = Block(chunkCoords, position = (float(data[0]), float(data[1]), float(data[2])), blockType=data[3])
+                chunkData.addBlock(block)
         return chunkData
 
 
@@ -153,23 +131,32 @@ class Block(Entity):
     blockType = { 
         'stone': 0,
         'dirt': 1,
-        'grass': 2
+        'cobble': 3
     }
 
     blockTypeTextures = {
         'stone': './Textures/stone.png',
         'dirt': './Textures/dirt.png',
-        'grass': './Textures/grass.png'
+        'cobble': './Textures/cobblestone.png'
     }
 
-    def __init__(self, position = (0,0,0), type = 'stone'):
+    def __init__(self, chunkCoords, position = (0,0,0), blockType = 'stone', ):
         super().__init__(
             position = position,
             model = 'cube',
             origin_y = 0.5,
-            texture = self.blockTypeTextures.get(type),
-            color = color.white
+            texture = self.blockTypeTextures.get(blockType),
+            color = color.white,
+            collider = 'box'
             )
+        self.blockType = blockType
+        self.chunkCoordinates = chunkCoords
+
+    def getType(self):
+        return self.blockType
+
+    def getChunkCoords(self):
+        return self.chunkCoordinates
 
 class ChunkData():
 
@@ -189,6 +176,8 @@ class ChunkData():
     def addBlock(self, block):
         self.__blocks.append(block)
 
+    def removeBlock(self, block):
+        self.__blocks.remove(block)
 
 class ChunkCoords():
 
@@ -314,6 +303,27 @@ class Game():
         self.movementHandler.changeCoords(UserCoords(self.player.x, self.player.z))
         self.movementHandler.changeChunkCoords(self.locator.locate(UserCoords(self.player.x, self.player.z)))
 
+    def save(self):
+        for chunkData in self.chunkDataList:
+            if(not self.generator.checker.hasBeenGenerated(chunkData.getCoords())):
+                self.generator.saver.saveChunkData(chunkData)
+            chunkDataFile = open("ChunkData.txt", "r")
+            data = chunkDataFile.readlines()
+            lineNumber = 0
+            for i in range(len(data)):
+                x = data[i].split(";")[0].split(",")[0] #returns the x coordinate of a bit of chunk data from file
+                y = data[i].split(";")[0].split(",")[1] #returns the y coordinate
+                if((chunkData.getCoords().getX() == int(x)) and (chunkData.getCoords().getY() == int(y))):
+                    lineNumber = i
+                    break
+            data[lineNumber] = str(chunkData.getCoords().getX()) + "," + str(chunkData.getCoords().getY()) + ";"
+            for block in chunkData.getBlocks():
+                data[lineNumber] += str(block.X) + "," + str(block.Y) + "," + str(block.Z) + "," + str(block.getType()) + ":"
+            data[lineNumber] = data[lineNumber] + "\n"
+            chunkDataFile = open("ChunkData.txt", "w")
+            chunkDataFile.writelines(data)
+            chunkDataFile.close()
+
     def handle_input(self):
         #time.dt is the difference between a second and the frequency of the game being run so that the game speed is the same regardless of
         #different FPS values
@@ -322,11 +332,37 @@ class Game():
         elif(held_keys['space']):
             self.player.y += 3 * time.dt
         elif(held_keys['escape']):
+            self.save()
             quit()
         elif(held_keys['g']):
-            self.player.gravity = (1 if self.player.gravity == 0 else 0)
+            self.player.gravity = not self.player.gravity
         elif(held_keys['l']):
             self.updateChunks()
+
+    def breakBlock(self):
+        direction = camera.forward
+        origin = self.player.world_position + Vec3(0,2,0)
+        hit_info = raycast(origin, direction, ignore=(self.player,), distance=inf, traverse_target=scene, debug=False)
+        if(hit_info.entities):
+            block = hit_info.entities[0]
+            block.disable()
+            for chunkData in self.chunkDataList:
+                if chunkData.getCoords() == block.getChunkCoords():
+                    chunkData.removeBlock(block)
+    def placeBlock(self):
+        direction = camera.forward
+        origin = self.player.world_position + Vec3(0,2,0)
+        hit_info = raycast(origin, direction, ignore=(self.player,), distance=inf, traverse_target=scene, debug=False)
+        if(hit_info.entities):
+            surfaceBlock = hit_info.entities[0]
+            for chunkData in self.chunkDataList:
+                if chunkData.getCoords() == surfaceBlock.getChunkCoords():
+                    block = Block(chunkData.getCoords(), position=(surfaceBlock.X, surfaceBlock.Y+1, surfaceBlock.Z), blockType='cobble')
+                    chunkData.addBlock(block)
+
+
+                
+
 
     def culling(self):
         #identifies all non-visible entities (raycasting?)
@@ -351,7 +387,9 @@ def update():
     game.update()
 
 def input(key):
-    if(key == 'c'):
-        game.deleteChunk(4)
+    if key == 'left mouse down':
+        game.breakBlock()
+    elif key == 'right mouse down':
+        game.placeBlock()
 
 app.run()

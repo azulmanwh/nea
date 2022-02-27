@@ -74,66 +74,100 @@ class ChunkSaver():
 
 class ChunkGenerator():
 
-    def __init__(self, checker, noise, saver, locator):
+    def __init__(self, checker, noises, saver, locator):
         self.__checker = checker
-        self.__noise = noise
+        self.__noises = noises
         self.__locator = locator
         self.saver = saver
 
     def generate(self, coordinates):
-        terrain = Entity(model=None, collider=None)
+        #All the terrain lines of code increase the fps of the program  by about 100.
+        #the terrain lines of code stop the individual access of blocks
         if(self.__checker.hasBeenGenerated(coordinates)):
-            return(self.load(coordinates, terrain))
+            return(self.load(coordinates))
         else:
             ycoordinates = []
+            #topterrain = Entity(model=None, collider=None)
+            #underterrain = Entity(model=None, collider=None)
             chunkData = ChunkData(coordinates, [])
+            depth = 4 #how many blocks are rendered underneath the top block
             #pixel will be the coordinate of the noise for the block, which needs to be adjusted as the coordinates are chunk coordinates
             pixelX = coordinates.getX()*10
             pixelY = coordinates.getY()*10
-            heightScale = 20 #how high the blocks will spawn multiplier
-            res = 200 #"width" of the noisemap
+            heightScale = 30 #how high the blocks will spawn multiplier
+            res = 500 #"width" of the noisemap
             for z in range(10):
                 for x in range(10):
                     #instantiates a block at the location
                     #the noise refers to a float which will be the height of the block
                     #saving to chunkData allows for the blocks to be changed after being instantiated
                     #saving to ycoordinates so that the chunkdata can be saved
-                    y_value = round(self.__noise([(pixelX + x)/res, (pixelY + z)/res])*heightScale)
-                    block = Block(position = (pixelX + x, y_value, pixelY + z))
-                    block.parent = terrain
-                    chunkData.addBlock(block)
+                    y_value = round(self.__noises[0]([(pixelX + x)/res, (pixelY + z)/res])*heightScale)
+                    y_value += round(0.5 * self.__noises[1]([(pixelX + x)/res, (pixelY + z)/res])*heightScale)
+                    y_value += round(0.25 * self.__noises[2]([(pixelX + x)/res, (pixelY + z)/res])*heightScale)
+                    y_value += round(0.125 * self.__noises[3]([(pixelX + x)/res, (pixelY + z)/res])*heightScale)
+                    topblock = Block(position = (pixelX + x, y_value, pixelY + z), type = 'grass')
+                    #topblock.parent = topterrain
+                    chunkData.addBlock(topblock)
+                    for i in range(1,depth):
+                        block = Block(position = (pixelX + x, y_value-i, pixelY + z), type = 'dirt')
+                        #block.parent = underterrain
+                        chunkData.addBlock(block)
                     ycoordinates.append(y_value)
-            terrain.combine()
-            terrain.texture = './Textures/stone.png'
+            #topterrain.combine()
+            #topterrain.texture = './Textures/grass.png'
+            #underterrain.combine()
+            #underterrain.texture = './Textures/stone.png'
             self.saver.saveChunkData(coordinates, ycoordinates)
             return chunkData
 
-    def load(self, coordinates, terrain):
+    def load(self, coordinates):
+        topterrain = Entity(model=None, collider=None)
+        underterrain = Entity(model=None, collider=None)
         pixelX = coordinates.getX()*10
-        pixelZ = coordinates.getY()*10
+        pixelY = coordinates.getY()*10
+        depth = 4
         y_coordinates = str(self.__locator.getData(coordinates)).split(",")
         chunkData = ChunkData(coordinates, [])
         i = 0
         for z in range(10):
             for x in range(10):
                 y_value = int(y_coordinates[i])
-                block = Block(position = (pixelX + x, y_value, pixelZ + z))
-                block.parent = terrain
-                chunkData.addBlock(block)
+                topblock = Block(position = (pixelX + x, y_value, pixelY + z), type = 'grass')
+                #topblock.parent = topterrain
+                chunkData.addBlock(topblock)
+                for j in range(1,depth):
+                        block = Block(position = (pixelX + x, y_value-j, pixelY + z), type = 'dirt')
+                        #block.parent = underterrain
+                        chunkData.addBlock(block)
                 i += 1
-        terrain.combine()
-        terrain.texture = './Textures/stone.png'
+        #topterrain.combine()
+        #topterrain.texture = './Textures/grass.png'
+        #underterrain.combine()
+        #underterrain.texture = './Textures/stone.png'
         return chunkData
 
 
 class Block(Entity):
 
-    def __init__(self, position = (0,0,0)):
+    blockType = { 
+        'stone': 0,
+        'dirt': 1,
+        'grass': 2
+    }
+
+    blockTypeTextures = {
+        'stone': './Textures/stone.png',
+        'dirt': './Textures/dirt.png',
+        'grass': './Textures/grass.png'
+    }
+
+    def __init__(self, position = (0,0,0), type = 'stone'):
         super().__init__(
             position = position,
             model = 'cube',
             origin_y = 0.5,
-            texture = './Textures/stone.png',
+            texture = self.blockTypeTextures.get(type),
             color = color.white
             )
 
@@ -221,12 +255,12 @@ class MovementHandler():
 
 class Game():
 
-    def __init__(self, player, noise):
+    def __init__(self, player, noises):
         self.player = player
-        self.noise = noise
+        self.noises = noises
         self.locator = ChunkLocator(player, "ChunkData.txt")
         self.movementHandler = MovementHandler(ChunkLocator(player, "ChunkData.txt")) # Initiates movement handler.
-        self.generator = ChunkGenerator(ChunkChecker("ChunkData.txt"), noise, ChunkSaver("ChunkData.txt", self.locator), self.locator)
+        self.generator = ChunkGenerator(ChunkChecker("ChunkData.txt"), noises, ChunkSaver("ChunkData.txt", self.locator), self.locator)
         self.chunkDataList = []
         self.__renderDistance = 5
 
@@ -235,6 +269,7 @@ class Game():
         self.chunkDataList.append(self.generator.generate(self.movementHandler.currentChunk))
         self.updateChunks()
     def update(self):
+        self.culling()
         self.updateCoords()
         if(self.movementHandler.chunkChanged()):
             self.updateChunks()
@@ -293,13 +328,23 @@ class Game():
         elif(held_keys['l']):
             self.updateChunks()
 
+    def culling(self):
+        #identifies all non-visible entities (raycasting?)
+        #disables entities if they are not already disabled
+        pass
 
 
 app = Ursina()
 
-game = Game(FirstPersonController(gravity=0), PerlinNoise(octaves = 16, seed = 1))
-game.start()
+seed = 420
+noises = []
+noises.append(PerlinNoise(12,seed))
+noises.append(PerlinNoise(6,seed))
+noises.append(PerlinNoise(24,seed))
+noises.append(PerlinNoise(3,seed))
 
+game = Game(FirstPersonController(gravity=0), noises)
+game.start()
 
 #ursina functions can't make oop
 def update():
